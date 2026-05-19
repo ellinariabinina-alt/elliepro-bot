@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 
 # ─── СТРУКТУРА: СТАРШИЙ → ЕГО КУРАТОРЫ ──────────────────────
 SENIOR_TO_CURATORS = {
-    "0":    [11, 12, 13, 14, 15, 16, 17, 18, 19, 20],  # Коротких
-    "00":   [21, 22, 23, 24, 27, 28, 30],               # Крылова
-    "0000": [41, 42, 43, 44, 45, 46, 47],               # Власова
+    "Юнит 0":    ["Юнит 11","Юнит 12","Юнит 13","Юнит 14","Юнит 15","Юнит 16","Юнит 17","Юнит 18","Юнит 19","Юнит 20"],
+    "Юнит 00":   ["Юнит 21","Юнит 22","Юнит 23","Юнит 24","Юнит 27","Юнит 28","Юнит 30"],
+    "Юнит 0000": ["Юнит 41","Юнит 42","Юнит 43","Юнит 44","Юнит 45","Юнит 46","Юнит 47"],
 }
 
 # ─── GOOGLE SHEETS ───────────────────────────────────────────
@@ -61,12 +61,12 @@ def get_active_clients_for_unit(unit_number):
             logger.error(f"Не найдены колонки. Заголовки: {headers}")
             return []
 
-        unit_str = str(unit_number)
+        unit_str = str(unit_number)  # уже в формате "Юнит 22"
         clients = []
         for row in all_values[1:]:
             if len(row) <= max(idx_unit, idx_name):
                 continue
-            row_unit = str(row[idx_unit]).replace("Юнит ", "").strip()
+            row_unit = str(row[idx_unit]).strip()
             status = str(row[idx_status]).strip() if idx_status != -1 else "активный"
             name = str(row[idx_name]).strip()
             if row_unit == unit_str and status.lower() == "активный" and name:
@@ -141,14 +141,10 @@ def get_curators_for_senior(senior_unit):
                 continue
             unit = str(row[idx_unit]).strip() if idx_unit != -1 else ""
             role = str(row[idx_role]).strip() if idx_role != -1 else ""
-            if role == "куратор":
-                try:
-                    if int(unit) in junior_units:
-                        name_val = str(row[idx_name]).strip() if idx_name != -1 else ""
-                        surname = str(row[idx_surname]).strip() if idx_surname != -1 else ""
-                        curators.append((unit, f"{name_val} {surname}".strip()))
-                except:
-                    pass
+            if role == "куратор" and unit in junior_units:
+                name_val = str(row[idx_name]).strip() if idx_name != -1 else ""
+                surname = str(row[idx_surname]).strip() if idx_surname != -1 else ""
+                curators.append((unit, f"{name_val} {surname}".strip()))
         return curators
     except Exception as e:
         logger.error(f"Ошибка получения кураторов: {e}")
