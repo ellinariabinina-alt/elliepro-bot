@@ -300,11 +300,25 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     now = datetime.datetime.now(MOSCOW_TZ)
     date_str = now.strftime("%d.%m %H:%M")
     period = "утро" if now.hour < 14 else "вечер"
+    key = "morning" if period == "утро" else "evening"
+    blockers_key = "blockers_morning" if period == "утро" else "blockers_evening"
 
-    submitted = [v["name"] for v in checklist_status.values() if v.get("morning" if period == "утро" else "evening")]
-    not_submitted = [v["name"] for v in checklist_status.values() if not v.get("morning" if period == "утро" else "evening")]
+    all_curators = get_all_curators()
+    total = len(all_curators)
 
-    total = len(checklist_status)
+    submitted = []
+    not_submitted = []
+    with_blockers = []
+
+    for chat_id, name in all_curators:
+        status = checklist_status.get(int(chat_id), {})
+        if status.get(key):
+            submitted.append(name)
+            if status.get(blockers_key):
+                with_blockers.append(name)
+        else:
+            not_submitted.append(name)
+
     lines = [
         f"📊 Сводка на {date_str} ({period})",
         f"✅ Сдали: {len(submitted)}/{total}",
@@ -312,6 +326,10 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not_submitted:
         lines.append(f"\n❌ Не сдали ({len(not_submitted)}):")
         for n in not_submitted:
+            lines.append(f"  — {n}")
+    if with_blockers:
+        lines.append(f"\n⚠️ Есть блокеры/проблемы ({len(with_blockers)}):")
+        for n in with_blockers:
             lines.append(f"  — {n}")
 
     await update.message.reply_text("\n".join(lines), parse_mode="Markdown")
