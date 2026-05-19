@@ -13,7 +13,7 @@ from telegram.ext import (
 # ─── НАСТРОЙКИ ───────────────────────────────────────────────
 import os
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "ВСТАВЬ_ТОКЕН_СЮДА")
-CEO_CHAT_ID = -1003843039918
+NOTIFY_CHAT_ID = int(os.environ.get("NOTIFY_CHAT_ID", "0"))  # личка CEO
 SPREADSHEET_ID = "1lDKXBR7URApkfDqCZ6RMtPn283ZlV50MjxdwauvyW9Q"
 MOSCOW_TZ = pytz.timezone("Europe/Moscow")
 
@@ -22,9 +22,9 @@ logger = logging.getLogger(__name__)
 
 # ─── СТРУКТУРА: СТАРШИЙ → ЕГО КУРАТОРЫ ──────────────────────
 SENIOR_TO_CURATORS = {
-    "0":   [11, 12, 13, 14, 15, 16, 17, 18, 19, 20],
-    "00":  [21, 22, 23, 24, 27, 28, 30],
-    "000": [41, 42, 43, 44, 45, 46, 47],
+    "0":    [11, 12, 13, 14, 15, 16, 17, 18, 19, 20],  # Коротких
+    "00":   [21, 22, 23, 24, 27, 28, 30],               # Крылова
+    "0000": [41, 42, 43, 44, 45, 46, 47],               # Власова
 }
 
 # ─── GOOGLE SHEETS ───────────────────────────────────────────
@@ -200,11 +200,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 lines.append(f"  — {w}")
 
     report = "\n".join(lines)
-    await context.bot.send_message(CEO_CHAT_ID, report, parse_mode="Markdown")
+    await context.bot.send_message(NOTIFY_CHAT_ID, report, parse_mode="Markdown")
 
 # ─── КОМАНДА /summary ────────────────────────────────────────
 async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.message.chat_id != CEO_CHAT_ID:
+    if update.message.chat_id != NOTIFY_CHAT_ID:
         return
 
     import datetime
@@ -249,7 +249,7 @@ async def auto_summary(context: ContextTypes.DEFAULT_TYPE):
         for n in not_submitted:
             lines.append(f"  — {n}")
 
-    await context.bot.send_message(CEO_CHAT_ID, "\n".join(lines), parse_mode="Markdown")
+    await context.bot.send_message(NOTIFY_CHAT_ID, "\n".join(lines), parse_mode="Markdown")
 
 # ─── ЗАПУСК ──────────────────────────────────────────────────
 def main():
