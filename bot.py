@@ -77,41 +77,76 @@ def get_active_clients_for_unit(unit_number):
         return []
 
 def get_curator_info(chat_id):
-    """Возвращает (unit, role, full_name) по chat_id"""
+    """Возвращает (unit, role, full_name) по chat_id — читает как текст чтобы сохранить 00, 000"""
     try:
         gc = get_sheets_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
         ws = sh.worksheet("Кураторы")
-        rows = ws.get_all_records()
+        all_values = ws.get_all_values()
+        if not all_values:
+            return None, None, None
 
-        for row in rows:
-            if str(row.get("chat_id", "")).strip() == str(chat_id):
-                unit = str(row.get("юнит", "")).strip()
-                role = str(row.get("роль", "")).strip()
-                name = f"{row.get('имя', '')} {row.get('фамилия', '')}".strip()
-                return unit, role, name
+        headers = [h.lower().strip() for h in all_values[0]]
+        def col(name):
+            for i, h in enumerate(headers):
+                if name in h:
+                    return i
+            return -1
+
+        idx_chat = col("chat_id")
+        idx_unit = col("юнит")
+        idx_role = col("роль")
+        idx_name = col("имя")
+        idx_surname = col("фамилия")
+
+        for row in all_values[1:]:
+            if idx_chat == -1 or len(row) <= idx_chat:
+                continue
+            if str(row[idx_chat]).strip() == str(chat_id):
+                unit = str(row[idx_unit]).strip() if idx_unit != -1 else ""
+                role = str(row[idx_role]).strip() if idx_role != -1 else ""
+                name_val = str(row[idx_name]).strip() if idx_name != -1 else ""
+                surname = str(row[idx_surname]).strip() if idx_surname != -1 else ""
+                return unit, role, f"{name_val} {surname}".strip()
     except Exception as e:
         logger.error(f"Ошибка чтения Кураторов: {e}")
     return None, None, None
 
 def get_curators_for_senior(senior_unit):
-    """Возвращает список (unit, full_name) кураторов старшего"""
+    """Возвращает список (unit, full_name) кураторов старшего — читает как текст"""
     try:
         gc = get_sheets_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
         ws = sh.worksheet("Кураторы")
-        rows = ws.get_all_records()
+        all_values = ws.get_all_values()
+        if not all_values:
+            return []
+
+        headers = [h.lower().strip() for h in all_values[0]]
+        def col(name):
+            for i, h in enumerate(headers):
+                if name in h:
+                    return i
+            return -1
+
+        idx_unit = col("юнит")
+        idx_role = col("роль")
+        idx_name = col("имя")
+        idx_surname = col("фамилия")
 
         junior_units = SENIOR_TO_CURATORS.get(str(senior_unit), [])
         curators = []
-        for row in rows:
-            unit = str(row.get("юнит", "")).strip()
-            role = str(row.get("роль", "")).strip()
+        for row in all_values[1:]:
+            if len(row) <= max(idx_unit, idx_role):
+                continue
+            unit = str(row[idx_unit]).strip() if idx_unit != -1 else ""
+            role = str(row[idx_role]).strip() if idx_role != -1 else ""
             if role == "куратор":
                 try:
                     if int(unit) in junior_units:
-                        name = f"{row.get('имя', '')} {row.get('фамилия', '')}".strip()
-                        curators.append((unit, name))
+                        name_val = str(row[idx_name]).strip() if idx_name != -1 else ""
+                        surname = str(row[idx_surname]).strip() if idx_surname != -1 else ""
+                        curators.append((unit, f"{name_val} {surname}".strip()))
                 except:
                     pass
         return curators
