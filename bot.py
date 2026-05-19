@@ -42,14 +42,33 @@ def get_active_clients_for_unit(unit_number):
         gc = get_sheets_client()
         sh = gc.open_by_key(SPREADSHEET_ID)
         ws = sh.worksheet("Отчет")
-        rows = ws.get_all_records()
+        all_values = ws.get_all_values()
+        if not all_values:
+            return []
+
+        headers = all_values[0]
+        def col(name):
+            for i, h in enumerate(headers):
+                if name.lower() in h.lower():
+                    return i
+            return -1
+
+        idx_unit = col("юнит")
+        idx_status = col("активн")
+        idx_name = col("фамилия имя")
+
+        if idx_unit == -1 or idx_name == -1:
+            logger.error(f"Не найдены колонки. Заголовки: {headers}")
+            return []
 
         unit_str = str(unit_number)
         clients = []
-        for row in rows:
-            row_unit = str(row.get("Юнит", "")).replace("Юнит ", "").strip()
-            status = str(row.get("Активный", "")).strip()
-            name = str(row.get("Фамилия имя", "")).strip()
+        for row in all_values[1:]:
+            if len(row) <= max(idx_unit, idx_name):
+                continue
+            row_unit = str(row[idx_unit]).replace("Юнит ", "").strip()
+            status = str(row[idx_status]).strip() if idx_status != -1 else "активный"
+            name = str(row[idx_name]).strip()
             if row_unit == unit_str and status.lower() == "активный" and name:
                 clients.append(name.lower())
         return clients
