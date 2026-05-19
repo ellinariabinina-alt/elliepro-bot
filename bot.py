@@ -150,6 +150,41 @@ def get_curators_for_senior(senior_unit):
         logger.error(f"Ошибка получения кураторов: {e}")
         return []
 
+def get_all_curators():
+    """Возвращает список (chat_id, name) всех кураторов и старших кураторов"""
+    try:
+        gc = get_sheets_client()
+        sh = gc.open_by_key(SPREADSHEET_ID)
+        ws = sh.worksheet("Кураторы")
+        all_values = ws.get_all_values()
+        if not all_values:
+            return []
+        headers = [h.lower().strip() for h in all_values[0]]
+        def col(name):
+            for i, h in enumerate(headers):
+                if name in h:
+                    return i
+            return -1
+        idx_chat = col("chat_id")
+        idx_role = col("роль")
+        idx_name = col("имя")
+        idx_surname = col("фамилия")
+        curators = []
+        for row in all_values[1:]:
+            if len(row) <= idx_chat:
+                continue
+            role = str(row[idx_role]).strip() if idx_role != -1 else ""
+            if role in ("куратор", "старший куратор"):
+                chat_id = str(row[idx_chat]).strip()
+                name_val = str(row[idx_name]).strip() if idx_name != -1 else ""
+                surname = str(row[idx_surname]).strip() if idx_surname != -1 else ""
+                if chat_id:
+                    curators.append((chat_id, f"{name_val} {surname}".strip()))
+        return curators
+    except Exception as e:
+        logger.error(f"Ошибка get_all_curators: {e}")
+        return []
+
 # ─── ПРОВЕРКА ЧЕК-ЛИСТА ──────────────────────────────────────
 def check_checklist(text, active_clients, curator_names=None):
     """
@@ -187,12 +222,15 @@ def is_checklist(text):
     return "чек-лист" in text_lower or "чек лист" in text_lower
 
 # ─── ХРАНИЛИЩЕ СТАТУСОВ ──────────────────────────────────────
-checklist_status = {}  # chat_id → {"name": ..., "unit": ..., "morning": bool, "evening": bool}
+checklist_status = {}  # chat_id → {"name": ..., "unit": ..., "morning": bool, "evening": bool, "blockers": bool}
 
-def update_status(chat_id, name, unit, period):
+def update_status(chat_id, name, unit, period, has_blockers=False):
     if chat_id not in checklist_status:
-        checklist_status[chat_id] = {"name": name, "unit": unit, "morning": False, "evening": False}
+        checklist_status[chat_id] = {"name": name, "unit": unit, "morning": False, "evening": False, "blockers_morning": False, "blockers_evening": False}
     checklist_status[chat_id][period] = True
+    if has_blockers:
+        blockers_key = "blockers_morning" if period == "morning" else "blockers_evening"
+        checklist_status[chat_id][blockers_key] = True
 
 # ─── ОБРАБОТЧИК СООБЩЕНИЙ ────────────────────────────────────
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -228,7 +266,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text, active_clients, curator_names
     )
 
-    update_status(chat_id, name, unit, period)
+    has_blockers = len(warnings) == 0  # нет замечаний = блокеры упомянуты
+    update_status(chat_id, name, unit, period, has_blockers=("нет блока" not in str(warnings)))
 
     # Формируем отчёт
     lines = [f"📋 Чек-лист получен: *{name}* ({period_label})"]
@@ -279,16 +318,30 @@ async def summary(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # ─── АВТОСВОДКА ──────────────────────────────────────────────
 async def auto_summary(context: ContextTypes.DEFAULT_TYPE):
-    now = context.job.data["time_label"]
-    period = "утро" if "утро" in now else "вечер"
-    key = "morning" if period == "утро" else "evening"
-
-    submitted = [v["name"] for v in checklist_status.values() if v.get(key)]
-    not_submitted = [v["name"] for v in checklist_status.values() if not v.get(key)]
-    total = len(checklist_status)
-
     import datetime
+    now_label = context.job.data["time_label"]
+    period = "утро" if "утро" in now_label else "вечер"
+    key = "morning" if period == "утро" else "evening"
+    blockers_key = "blockers_morning" if period == "утро" else "blockers_evening"
+
     date_str = datetime.datetime.now(MOSCOW_TZ).strftime("%d.%m %H:%M")
+
+    # Загружаем полный список кураторов
+    all_curators = get_all_curators()
+    total = len(all_curators)
+
+    submitted = []
+    not_submitted = []
+    with_blockers = []
+
+    for chat_id, name in all_curators:
+        status = checklist_status.get(int(chat_id), {})
+        if status.get(key):
+            submitted.append(name)
+            if status.get(blockers_key):
+                with_blockers.append(name)
+        else:
+            not_submitted.append(name)
 
     lines = [
         f"📊 Автосводка на {date_str} ({period})",
@@ -297,6 +350,10 @@ async def auto_summary(context: ContextTypes.DEFAULT_TYPE):
     if not_submitted:
         lines.append(f"\n❌ Не сдали ({len(not_submitted)}):")
         for n in not_submitted:
+            lines.append(f"  — {n}")
+    if with_blockers:
+        lines.append(f"\n⚠️ Есть блокеры/проблемы ({len(with_blockers)}):")
+        for n in with_blockers:
             lines.append(f"  — {n}")
 
     await context.bot.send_message(NOTIFY_CHAT_ID, "\n".join(lines), parse_mode="Markdown")
@@ -312,12 +369,12 @@ def main():
     job_queue = app.job_queue
     job_queue.run_daily(
         auto_summary,
-        time=time(7, 35, tzinfo=MOSCOW_TZ),  # 10:35 МСК = 07:35 UTC
+        time=time(7, 30, tzinfo=MOSCOW_TZ),  # 10:30 МСК = 07:30 UTC
         data={"time_label": "утро"}
     )
     job_queue.run_daily(
         auto_summary,
-        time=time(16, 5, tzinfo=MOSCOW_TZ),  # 19:05 МСК = 16:05 UTC
+        time=time(16, 30, tzinfo=MOSCOW_TZ),  # 19:30 МСК = 16:30 UTC
         data={"time_label": "вечер"}
     )
 
