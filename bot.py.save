@@ -1,0 +1,141 @@
+import asyncio
+import logging
+from aiogram import Bot, Dispatcher
+from aiogram.types import Message
+from aiogram.filters import Command
+
+BOT_TOKEN = "8977339136:AAGDfFjj1BuCkXzNS5aZAcghp3Cspes_lEU"
+
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher()
+
+@dp.message()
+async def handle_message(message: Message):
+    print(f"Сообщение из чата {message.chat.id}: {message.text}")
+
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())import asyncio
+import logging
+from datetime import datetime, time
+import pytz
+from aiogram import Bot, Dispatcher
+from aiogram.types import Message
+
+BOT_TOKEN = "8977339136:AAGDfFjj1BuCkXzNS5aZAcghp3Cspes_lEU"
+CEO_CHAT_ID = -1003843039918
+YOUR_ID = 87998099  # заполним на следующем шаге
+
+UNITS = [
+    {"id": -1003843039918, "name": "CEO Анна Коновалова", "role": "ceo"},
+    {"id": -1003977848094, "name": "Юнит 1 Гульвачук Анна", "role": "старший куратор"},
+    {"id": -1003698655238, "name": "Юнит 0 Коротких Анна", "role": "старший куратор"},
+    {"id": -1002094427745, "name": "Юнит 11 Аксенова Арина", "role": "куратор"},
+    {"id": -1003510587743, "name": "Юнит 12 Безвинная Полина", "role": "куратор"},
+    {"id": -1003383131948, "name": "Юнит 13 Деменковец Анна", "role": "куратор"},
+    {"id": -876729436, "name": "Юнит 14 Леонова Эллина", "role": "куратор"},
+    {"id": -708866901, "name": "Юнит 15 Ананевич Алина", "role": "куратор"},
+    {"id": -957249228, "name": "Юнит 16 Страх Милена", "role": "куратор"},
+    {"id": -1003740935651, "name": "Юнит 17 Симончик Анна", "role": "куратор"},
+    {"id": -1002385621835, "name": "Юнит 18 Давыдова Ксения", "role": "куратор"},
+    {"id": -4120894435, "name": "Юнит 19 Пекарина Александра", "role": "куратор"},
+    {"id": -1003946584647, "name": "Юнит 20 Скубиева Екатерина", "role": "куратор"},
+    {"id": -1003909669370, "name": "Юнит 00 Крылова Анна", "role": "старший куратор"},
+    {"id": -1003651433120, "name": "Юнит 21 Мискевич Екатерина", "role": "куратор"},
+    {"id": -1002397975487, "name": "Юнит 22 Робилко Татьяна", "role": "куратор"},
+    {"id": -1001685190818, "name": "Юнит 23 Именная Виктория", "role": "куратор"},
+    {"id": -4006248550, "name": "Юнит 24 Кцоева Дарья", "role": "куратор"},
+    {"id": -1003952930387, "name": "Юнит 27 Пильщикова Елизавета", "role": "куратор"},
+    {"id": -861357628, "name": "Юнит 28 Гузняк Полина", "role": "куратор"},
+    {"id": -1003925996524, "name": "Юнит 30 Соленая Александра", "role": "куратор"},
+    {"id": -627434948, "name": "Юнит 0000 Власова Вероника", "role": "старший куратор"},
+    {"id": -1003518314376, "name": "Юнит 41 Григоренко Вероника", "role": "куратор"},
+    {"id": -4507855357, "name": "Юнит 42 Назарова Екатерина", "role": "куратор"},
+    {"id": -1002086193130, "name": "Юнит 43 Шваб Виктория", "role": "куратор"},
+    {"id": -918694688, "name": "Юнит 44 Железная Ксения", "role": "куратор"},
+    {"id": -853129201, "name": "Юнит 45 Кацман Лолита", "role": "куратор"},
+    {"id": -1003949563241, "name": "Юнит 46 Бойко Валерия", "role": "куратор"},
+    {"id": -1003957671027, "name": "Юнит 47 Путикова Алиса", "role": "куратор"},
+]
+
+MSK = pytz.timezone("Europe/Moscow")
+checklist_log = {}  # {chat_id: {"morning": True/False, "evening": True/False}}
+
+bot = Bot(token=BOT_TOKEN)
+dp = Dispatcher()
+
+def get_unit(chat_id):
+    for u in UNITS:
+        if u["id"] == chat_id:
+            return u
+    return None
+
+@dp.message()
+async def handle_message(message: Message):
+    text = message.text or ""
+    chat_id = message.chat.id
+    unit = get_unit(chat_id)
+    if not unit:
+        return
+
+    lower = text.lower()
+    if "чек-лист утро" in lower:
+        if chat_id not in checklist_log:
+            checklist_log[chat_id] = {}
+        checklist_log[chat_id]["morning"] = True
+        checklist_log[chat_id]["morning_text"] = text
+    elif "чек-лист вечер" in lower:
+        if chat_id not in checklist_log:
+            checklist_log[chat_id] = {}
+        checklist_log[chat_id]["evening"] = True
+        checklist_log[chat_id]["evening_text"] = text
+
+async def send_summary(period: str):
+    if not YOUR_ID:
+        return
+    now = datetime.now(MSK).strftime("%d.%m.%Y")
+    submitted = []
+    missing = []
+
+    for unit in UNITS:
+        cid = unit["id"]
+        log = checklist_log.get(cid, {})
+        has = log.get(period, False)
+        name = unit["name"]
+        if has:
+            submitted.append(f"✅ {name}")
+        else:
+            missing.append(f"❌ {name}")
+
+    period_label = "утро" if period == "morning" else "вечер"
+    text = f"📊 Сводка {now} ({period_label})\n\n"
+    text += f"Сдали: {len(submitted)}/{len(UNITS)}\n"
+    if missing:
+        text += "\nНе сдали:\n" + "\n".join(missing)
+    if submitted:
+        text += "\n\nСдали:\n" + "\n".join(submitted)
+
+    await bot.send_message(YOUR_ID, text)
+
+async def scheduler():
+    while True:
+        now = datetime.now(MSK)
+        if now.hour == 10 and now.minute == 31:
+            await send_summary("morning")
+            await asyncio.sleep(60)
+        elif now.hour == 19 and now.minute == 1:
+            await send_summary("evening")
+            await asyncio.sleep(60)
+            checklist_log.clear()
+        await asyncio.sleep(30)
+
+async def main():
+    logging.basicConfig(level=logging.INFO)
+    asyncio.create_task(scheduler())
+    await dp.start_polling(bot)
+
+if __name__ == "__main__":
+    asyncio.run(main())
